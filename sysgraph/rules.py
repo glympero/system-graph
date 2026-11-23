@@ -20,10 +20,21 @@ class Finding:
     extra_evidence: list[dict] = field(default_factory=list)
 
     def to_json(self, title: str) -> dict:
-        evidence = [{"file": e.file, "line": e.line, "note": f"{e.from_} {e.rel} {e.to}"} for e in self.evidence]
+        evidence = [{"file": e.file, "line": e.line, "note": describe(e)} for e in self.evidence]
         return {"id": f"{self.rule}:{self.subject}", "rule": self.rule, "title": title, "label": self.label,
                 "subject": self.nodes[0], "nodes": self.nodes, "message": self.message,
                 "evidence": sorted(evidence + self.extra_evidence, key=lambda x: (x["file"], x["line"]))}
+
+
+REL_TEXT = {"calls": "calls", "publishes": "publishes to", "subscribes": "subscribes to", "reads_table": "reads",
+            "writes_table": "writes", "exposes": "exposes", "declared_dependency": "declares a dependency on"}
+
+
+def describe(edge: Edge) -> str:
+    """Evidence notes in words: `payments-service writes orders.orders`."""
+    def short(node_id: str) -> str:
+        return node_id.split(":", 1)[1].replace(":", " ", 1) if node_id.startswith("endpoint:") else node_id.split(":", 1)[1]
+    return f"{short(edge.from_)} {REL_TEXT.get(edge.rel, edge.rel)} {short(edge.to)}"
 
 
 class Index:
