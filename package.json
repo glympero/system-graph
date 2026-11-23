@@ -11,11 +11,11 @@
   "scripts": {
     "graph": "python -m sysgraph build examples/bookshop",
     "view": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -p . && vite build",
     "preview": "vite preview",
     "mcp": "node web/mcp/server.ts",
     "lint": "eslint .",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -p .",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
