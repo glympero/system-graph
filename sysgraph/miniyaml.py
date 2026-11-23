@@ -18,7 +18,7 @@ def _strip_comment(line: str) -> str:
         if quote:
             if ch == quote:
                 quote = None
-        elif ch in "'\"":
+        elif ch in "'\"" and (i == 0 or line[i - 1] in " \t:[{,-"):
             quote = ch
         elif ch == "#" and (i == 0 or line[i - 1] in " \t"):
             return line[:i].rstrip()

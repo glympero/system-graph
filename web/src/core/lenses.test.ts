@@ -32,7 +32,13 @@ describe('lenses', () => {
 describe('links', () => {
   it('round-trips the view state through the hash', () => {
     const state = { lens: 'impact' as const, focus: 'table:orders.orders', depth: 2, q: 'impact', args: { node: 'table:orders.orders', depth: '2' } };
-    expect(decodeState(encodeState(state))).toEqual({ ...state, finding: undefined });
+    expect(decodeState(encodeState(state))).toMatchObject(state);
+  });
+
+  it('keeps display options and filters in the link', () => {
+    const state = { lens: 'services' as const, hideLabels: true, plainColours: true, spread: 1.5, hidden: ['topic' as const, 'schema' as const] };
+    expect(decodeState(encodeState(state))).toMatchObject(state);
+    expect(encodeState({ lens: 'services' })).toBe('#lens=services');
   });
 
   it('falls back to the services lens for an unknown lens', () => {

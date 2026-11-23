@@ -88,7 +88,7 @@ export class GraphIndex {
     const repo = this.nodes.get(`repo:${evidence.file.slice(0, slash)}`);
     const template = repo?.props?.link;
     if (typeof template !== 'string') return undefined;
-    return template.replace('{path}', evidence.file.slice(slash + 1)).replace('{line}', String(evidence.line));
+    return template.replaceAll('{path}', evidence.file.slice(slash + 1)).replaceAll('{line}', String(evidence.line));
   }
 }
 

@@ -68,7 +68,11 @@ def coverage_report(graph: Graph, counts: Counter) -> str:
 
 
 def publish(out: Path, files: dict[str, str]) -> None:
-    """Write to `out.next/`, check it parses, then swap file by file and keep the old files in `out.prev/`."""
+    """Write to `out.next/`, check it parses, then swap file by file and keep the old files in `out.prev/`.
+
+    Each swap is an atomic rename, so no reader ever sees a half-written file. A crash between two swaps can leave
+    files from two builds side by side; `out.prev/` holds the previous set to restore from.
+    """
     staging, previous = out.with_name(out.name + ".next"), out.with_name(out.name + ".prev")
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True)

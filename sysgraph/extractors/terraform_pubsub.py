@@ -53,7 +53,7 @@ def extract(ctx: RepoContext):
         topic = topic.rsplit("/", 1)[-1]
         props = {"topic": topic, "ordered": bool(_ORDERED.search(body))}
         if dlq := _DLQ.search(body):
-            props["dead_letter_topic"] = resolve(dlq)
+            props["dead_letter_topic"] = resolve(dlq).rsplit("/", 1)[-1]
         if service := _SERVICE.search(body):
             props["service"] = service.group(1)
         sub_id = f"subscription:{name.group(1)}"

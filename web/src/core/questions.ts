@@ -67,24 +67,33 @@ function incomingCalls(ix: GraphIndex, serviceId: string): GraphEdge[] {
   return [serviceId, ...endpoints].flatMap((id) => ix.incoming(id).filter((e) => e.rel === 'calls'));
 }
 
+const isTableUse = (e: GraphEdge): boolean => e.rel === 'reads_table' || e.rel === 'writes_table';
+const isStructural = (e: GraphEdge): boolean => e.rel === 'exposes' || e.rel === 'declared_dependency';
+const verbOf = (e: GraphEdge): string => e.rel.replace('_table', '');
+
+type Entry = { label: string; nodeIds: string[]; edge: GraphEdge };
+
+function outgoingEntry(ix: GraphIndex, edge: GraphEdge): Entry {
+  if (edge.rel === 'calls') return { label: `calls ${callLabel(ix, edge)}`, nodeIds: [ix.callTarget(edge), edge.to], edge };
+  return { label: `${verbOf(edge)} ${name(ix, edge.to)}`, nodeIds: [edge.to], edge };
+}
+
+function incomingEntry(ix: GraphIndex, edge: GraphEdge): Entry {
+  const nodeIds = [edge.from, edge.to];
+  if (edge.rel !== 'calls') return { label: `${verbOf(edge)} by ${name(ix, edge.from)}`, nodeIds, edge };
+  const target = ix.node(edge.to);
+  const route = target.type === 'endpoint' ? target.name : edge.props?.unmatched;
+  const via = typeof route === 'string' ? ` ${route}` : '';
+  return { label: `called by ${name(ix, edge.from)}${via}`, nodeIds, edge };
+}
+
 function connects(ix: GraphIndex, args: Record<string, string>): Answer {
   const node = nodeArg(ix, args, 'node');
-  const entries: { label: string; nodeIds: string[]; edge: GraphEdge }[] = [];
-  for (const edge of ix.outgoing(node.id)) {
-    if (edge.rel === 'exposes' || edge.rel === 'declared_dependency') continue;
-    const label = edge.rel === 'calls' ? `calls ${callLabel(ix, edge)}` : `${edge.rel.replace('_table', '')} ${name(ix, edge.to)}`;
-    entries.push({ label, nodeIds: [edge.rel === 'calls' ? ix.callTarget(edge) : edge.to, edge.to], edge });
-  }
   const incoming = node.type === 'service' ? incomingCalls(ix, node.id) : ix.incoming(node.id);
-  for (const edge of incoming) {
-    if (edge.rel === 'exposes' || edge.rel === 'declared_dependency') continue;
-    const target = ix.node(edge.to);
-    const route = target.type === 'endpoint' ? target.name : edge.props?.unmatched;
-    const via = edge.rel === 'calls' && typeof route === 'string' ? ` ${route}` : '';
-    const verb = edge.rel === 'calls' ? 'called by' : `${edge.rel.replace('_table', '')} by`;
-    entries.push({ label: `${verb} ${name(ix, edge.from)}${via}`, nodeIds: [edge.from, edge.to], edge });
-  }
-  const rows = grouped(ix, entries);
+  const rows = grouped(ix, [
+    ...ix.outgoing(node.id).filter((e) => !isStructural(e)).map((e) => outgoingEntry(ix, e)),
+    ...incoming.filter((e) => !isStructural(e)).map((e) => incomingEntry(ix, e)),
+  ]);
   return { question: 'connects', title: `What connects to ${node.name}`, summary: `${rows.length} connections.`, rows };
 }
 
@@ -99,7 +108,7 @@ function callers(ix: GraphIndex, args: Record<string, string>): Answer {
   return { question: 'callers', title: `Who calls ${node.name}`, summary: `${rows.length} callers.`, rows };
 }
 
-function byRelation(rel: 'publishes' | 'subscribes', verb: string) {
+function byRelation(rel: 'publishes' | 'subscribes', question: string, verb: string) {
   return (ix: GraphIndex, args: Record<string, string>): Answer => {
     const node = nodeArg(ix, args, 'node');
     const rows = grouped(ix, ix.incoming(node.id).filter((e) => e.rel === rel).map((edge) => ({
@@ -107,16 +116,17 @@ function byRelation(rel: 'publishes' | 'subscribes', verb: string) {
       nodeIds: [edge.from, node.id],
       edge,
     })));
-    return { question: rel === 'publishes' ? 'publishers' : 'subscribers', title: `Who ${verb} ${node.name}`,
-      summary: `${rows.length} ${rel === 'publishes' ? 'publishers' : 'subscribers'}.`, rows };
+    return { question, title: `Who ${verb} ${node.name}`, summary: `${rows.length} ${question}.`, rows };
   };
 }
 
 function tableUsers(ix: GraphIndex, args: Record<string, string>): Answer {
   const node = nodeArg(ix, args, 'node');
-  const rows = grouped(ix, ix.incoming(node.id)
-    .filter((e) => e.rel === 'reads_table' || e.rel === 'writes_table')
-    .map((edge) => ({ label: `${name(ix, edge.from)} ${edge.rel === 'reads_table' ? 'reads' : 'writes'}`, nodeIds: [edge.from, node.id], edge })));
+  const rows = grouped(ix, ix.incoming(node.id).filter(isTableUse).map((edge) => ({
+    label: `${name(ix, edge.from)} ${edge.rel === 'reads_table' ? 'reads' : 'writes'}`,
+    nodeIds: [edge.from, node.id],
+    edge,
+  })));
   return { question: 'table-users', title: `Who uses ${node.name}`, summary: `${rows.length} usages.`, rows };
 }
 
@@ -134,9 +144,7 @@ function topicSubscribers(ix: GraphIndex, topicId: string): [string, GraphEdge][
 /** One step of "who depends on this": the services that break when the node changes. */
 function dependents(ix: GraphIndex, id: string): [string, GraphEdge][] {
   const node = ix.node(id);
-  const users = (target: string) => ix.incoming(target)
-    .filter((e) => e.rel === 'reads_table' || e.rel === 'writes_table')
-    .map((e): [string, GraphEdge] => [e.from, e]);
+  const users = (target: string) => ix.incoming(target).filter(isTableUse).map((e): [string, GraphEdge] => [e.from, e]);
   switch (node.type) {
     case 'table':
       return users(id);
@@ -158,32 +166,34 @@ function dependents(ix: GraphIndex, id: string): [string, GraphEdge][] {
   }
 }
 
+/** Add the services one step past `frontier` to `found`; returns the ones seen for the first time. */
+function expand(ix: GraphIndex, startId: string, frontier: string[], depth: number, found: Map<string, Row>): string[] {
+  const next: string[] = [];
+  for (const id of frontier) {
+    for (const [service, edge] of dependents(ix, id)) {
+      const known = found.get(service);
+      if (service === startId || (known && known.depth !== depth)) continue;
+      const row = known ?? { label: name(ix, service), nodeIds: [service], evidence: [], depth,
+        detail: `${depth === 1 ? 'directly' : `${depth} steps`} via ${name(ix, id)}` };
+      row.evidence.push(ix.evidence(edge));
+      if (!known) {
+        found.set(service, row);
+        next.push(service);
+      }
+    }
+  }
+  return next;
+}
+
 function impact(ix: GraphIndex, args: Record<string, string>): Answer {
   const start = nodeArg(ix, args, 'node');
   const maxDepth = Math.max(1, Math.min(6, Number(args.depth ?? 2) || 2));
   const found = new Map<string, Row>();
   let frontier = [start.id];
-  for (let depth = 1; depth <= maxDepth && frontier.length > 0; depth++) {
-    const next: string[] = [];
-    for (const id of frontier) {
-      for (const [service, edge] of dependents(ix, id)) {
-        if (service === start.id) continue;
-        const known = found.get(service);
-        if (known && known.depth !== depth) continue;
-        const row = known ?? { label: name(ix, service), nodeIds: [service], evidence: [], depth,
-          detail: `${depth === 1 ? 'directly' : `${depth} steps`} via ${name(ix, id)}` };
-        row.evidence.push(ix.evidence(edge));
-        if (!known) {
-          found.set(service, row);
-          next.push(service);
-        }
-      }
-    }
-    frontier = next;
-  }
+  for (let depth = 1; depth <= maxDepth && frontier.length > 0; depth++) frontier = expand(ix, start.id, frontier, depth, found);
   const rows = [...found.values()].sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0) || a.label.localeCompare(b.label));
-  return { question: 'impact', title: `What breaks if ${start.name} changes`,
-    summary: `${rows.length} services within ${maxDepth} ${maxDepth === 1 ? 'step' : 'steps'}.`, rows };
+  const steps = maxDepth === 1 ? 'step' : 'steps';
+  return { question: 'impact', title: `What breaks if ${start.name} changes`, summary: `${rows.length} services within ${maxDepth} ${steps}.`, rows };
 }
 
 /** Service-level dependency hops: synchronous calls first, then event flows. */
@@ -257,9 +267,9 @@ export const QUESTIONS: readonly Question[] = [
   { id: 'callers', title: 'Who calls this endpoint?', description: 'Callers of an endpoint, or of every endpoint of a service.',
     params: [{ name: 'node', label: 'Endpoint or service', kind: 'node', types: ['endpoint', 'service'] }], run: callers },
   { id: 'publishers', title: 'Who publishes to this topic?', description: 'Services that send events to a topic.',
-    params: [{ name: 'node', label: 'Topic', kind: 'node', types: ['topic'] }], run: byRelation('publishes', 'publishes to') },
+    params: [{ name: 'node', label: 'Topic', kind: 'node', types: ['topic'] }], run: byRelation('publishes', 'publishers', 'publishes to') },
   { id: 'subscribers', title: 'Who subscribes to this topic?', description: 'Services and subscriptions that consume a topic.',
-    params: [{ name: 'node', label: 'Topic', kind: 'node', types: ['topic'] }], run: byRelation('subscribes', 'subscribes to') },
+    params: [{ name: 'node', label: 'Topic', kind: 'node', types: ['topic'] }], run: byRelation('subscribes', 'subscribers', 'subscribes to') },
   { id: 'table-users', title: 'Who reads or writes this table?', description: 'Services that use a table, and how.',
     params: [{ name: 'node', label: 'Table', kind: 'node', types: ['table'] }], run: tableUsers },
   { id: 'path', title: 'How does A reach B?', description: 'Shortest chain of calls and events between two services.',

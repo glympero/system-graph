@@ -155,6 +155,19 @@ class TableUsageTest(unittest.TestCase):
         })
 
 
+class TableUsageEdgeCasesTest(unittest.TestCase):
+    def test_delete_across_lines_and_upsert_are_writes_only(self):
+        ctx = repo({"src/a.ts": """\
+            db.query(`DELETE
+              FROM sessions WHERE id = $1`);
+            db.query('INSERT INTO stock (sku) VALUES ($1) ON CONFLICT (sku) DO UPDATE SET n = 1');
+            """})
+        self.assertEqual(edges(table_usage.extract(ctx)), {
+            ("service:shop", "table:sessions", "writes_table", "shop/src/a.ts", 1),
+            ("service:shop", "table:stock", "writes_table", "shop/src/a.ts", 3),
+        })
+
+
 class K8sScalingTest(unittest.TestCase):
     def test_deployment_hpa_and_pdb_become_service_props(self):
         ctx = repo({"k8s/orders.yaml": """\
@@ -215,7 +228,7 @@ class TerraformPubsubTest(unittest.TestCase):
         f = "infra/tf/pubsub.tf"
         self.assertEqual(sorted(nodes(out)), ["subscription:mail-paid", "topic:payments.completed"])
         self.assertEqual(nodes(out)["subscription:mail-paid"].props,
-                         {"topic": "payments.completed", "ordered": True, "dead_letter_topic": "projects/p/topics/dlq",
+                         {"topic": "payments.completed", "ordered": True, "dead_letter_topic": "dlq",
                           "service": "mailer"})
         self.assertEqual(edges(out), {("subscription:mail-paid", "topic:payments.completed", "subscribes", f, 4)})
 

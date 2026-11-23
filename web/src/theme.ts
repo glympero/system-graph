@@ -1,7 +1,7 @@
 import type { Label, NodeType, Relation } from './core/types.ts';
 
 // Canvas colours. Each one is checked for at least 3:1 contrast against its theme background (WCAG 1.4.11).
-interface Palette {
+interface CanvasColours {
   background: string;
   label: string;
   dimmed: string;
@@ -10,7 +10,7 @@ interface Palette {
   finding: Record<Label, string>;
 }
 
-const LIGHT: Palette = {
+const LIGHT: CanvasColours = {
   background: '#ffffff',
   label: '#1a1f29',
   dimmed: '#d5d9e0',
@@ -19,7 +19,7 @@ const LIGHT: Palette = {
   finding: { Bad: '#c62828', Gap: '#a15c00', Good: '#2e7d32' },
 };
 
-const DARK: Palette = {
+const DARK: CanvasColours = {
   background: '#11161f',
   label: '#e6e9ef',
   dimmed: '#2a3240',
@@ -28,7 +28,7 @@ const DARK: Palette = {
   finding: { Bad: '#ff6b6b', Gap: '#f2b443', Good: '#5fd068' },
 };
 
-export function palette(dark: boolean): Palette {
+export function palette(dark: boolean): CanvasColours {
   return dark ? DARK : LIGHT;
 }
 

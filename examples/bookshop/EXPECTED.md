@@ -1,7 +1,7 @@
 # Planted problems in the bookshop estate
 
 Inkwell is a fictional online bookshop. Its nine repos are small but realistic, and a few problems were planted on
-purpose so every rule has something to find. `tests/test_rules.py` asserts that a build of this estate produces exactly
+purpose so every rule has something to find. `tests/test_pipeline.py` asserts that a build of this estate produces exactly
 the findings below, no more and no less.
 
 | Finding id | Label | What was planted |
@@ -14,6 +14,6 @@ the findings below, no more and no less.
 | `R5:service:storefront-web>service:inventory-service` | Gap | storefront-web still declares inventory-service, the code no longer calls it |
 | `R6:service:notifier` | Gap | notifier has a Deployment with one replica and no autoscaler |
 | `R6:service:payments-service` | Gap | the payments autoscaler is pinned at 3 to 3 |
-| `R7:service:inventory-service` | Bad | the PDB needs 2 available pods and the service only runs 2, so a node drain blocks |
+| `R7:service:inventory-service` | Bad | the PDB needs 2 available pods and the autoscaler can scale down to 2, so at that size a node drain stalls |
 | `R8:subscription:notifier-payments-completed` | Good | the receipt subscription has a dead-letter topic |
 | `R8:subscription:search-catalog-updates` | Bad | the ordered search subscription has no dead-letter topic, one poison message stalls it |

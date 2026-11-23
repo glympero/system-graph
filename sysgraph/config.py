@@ -41,6 +41,8 @@ def load_config(target: Path) -> Config:
     root = path.parent.resolve()
     repos, seen = [], set()
     for raw in doc.get("repos") or []:
+        if not isinstance(raw, dict):
+            raise ConfigError(f"each repo needs `name:` and `path:` or `git:`, got {raw!r}")
         name = str(raw.get("name", ""))
         if not _NAME.match(name):
             raise ConfigError(f"invalid repo name {name!r}")

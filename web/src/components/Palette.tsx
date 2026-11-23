@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { GraphIndex } from '../core/graph.ts';
-import { QUESTIONS, type Question } from '../core/questions.ts';
+import { QUESTIONS, type Param, type Question } from '../core/questions.ts';
+import { NodeOptions } from './NodeOptions.tsx';
 
 interface Props {
   index: GraphIndex;
@@ -69,6 +70,8 @@ export function Palette({ index, open, focus, onClose, onAsk }: Props) {
   };
 
   const focusNode = focus ? index.nodes.get(focus) : undefined;
+  // The selected node fills the first node field when its type fits the question.
+  const prefill = (p: Param): string => (focusNode && (!p.types || p.types.includes(focusNode.type)) ? focusNode.id : '');
 
   return (
     <dialog ref={dialog} className="palette" aria-labelledby={`${ids}-title`} onClose={close}>
@@ -122,14 +125,10 @@ export function Palette({ index, open, focus, onClose, onAsk }: Props) {
                     list={`${ids}-${p.name}-options`}
                     required={!p.optional}
                     autoFocus={i === 0}
-                    defaultValue={i === 0 && focusNode && (!p.types || p.types.includes(focusNode.type)) ? focusNode.id : ''}
+                    defaultValue={i === 0 ? prefill(p) : ''}
                     placeholder="Type a name, e.g. orders"
                   />
-                  <datalist id={`${ids}-${p.name}-options`}>
-                    {index.search('', p.types, 500).map((n) => (
-                      <option key={n.id} value={n.id}>{n.name}</option>
-                    ))}
-                  </datalist>
+                  <NodeOptions index={index} id={`${ids}-${p.name}-options`} types={p.types} />
                 </>
               )}
               {p.kind === 'depth' && <input name={p.name} type="number" min={1} max={6} defaultValue={2} />}

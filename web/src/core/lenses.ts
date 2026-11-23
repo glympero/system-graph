@@ -8,7 +8,7 @@ export const LENSES: readonly { id: Lens; label: string; hint: string }[] = [
   { id: 'services', label: 'Services', hint: 'Services, topics and schemas. Endpoints fold into services, tables into schemas, subscriptions into topics.' },
   { id: 'events', label: 'Events', hint: 'Who publishes and who subscribes, including Terraform subscriptions.' },
   { id: 'data', label: 'Data', hint: 'Which service reads and writes which table.' },
-  { id: 'impact', label: 'Impact', hint: 'Everything within N steps of the selected node.' },
+  { id: 'impact', label: 'Impact', hint: 'Everything that depends on the selected node, up to N steps away.' },
 ];
 
 export interface ViewNode {

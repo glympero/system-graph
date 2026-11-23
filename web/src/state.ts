@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { GraphIndex } from './core/graph.ts';
 import { decodeState, encodeState, type ViewState } from './core/links.ts';
 import type { FindingsData, GraphData } from './core/types.ts';
@@ -11,23 +11,25 @@ function subscribeHash(onChange: () => void): () => void {
 /** The view state lives in the URL hash; every change is a history entry, so Back works and links can be shared. */
 export function useViewState(): [ViewState, (next: Partial<ViewState>) => void] {
   const hash = useSyncExternalStore(subscribeHash, () => window.location.hash);
-  const state = decodeState(hash);
+  const state = useMemo(() => decodeState(hash), [hash]); // stable objects, so memos downstream do not rerun
   const update = useCallback((next: Partial<ViewState>) => {
     window.location.hash = encodeState({ ...decodeState(window.location.hash), ...next });
   }, []);
   return [state, update];
 }
 
+const DARK_QUERY = '(prefers-color-scheme: dark)';
+
+function subscribeDark(onChange: () => void): () => void {
+  const media = window.matchMedia(DARK_QUERY);
+  media.addEventListener('change', onChange);
+  return () => media.removeEventListener('change', onChange);
+}
+
+const prefersDark = (): boolean => window.matchMedia(DARK_QUERY).matches;
+
 export function usePrefersDark(): boolean {
-  const query = '(prefers-color-scheme: dark)';
-  return useSyncExternalStore(
-    (onChange) => {
-      const media = window.matchMedia(query);
-      media.addEventListener('change', onChange);
-      return () => media.removeEventListener('change', onChange);
-    },
-    () => window.matchMedia(query).matches,
-  );
+  return useSyncExternalStore(subscribeDark, prefersDark);
 }
 
 type Loaded = { index: GraphIndex; error?: undefined } | { index?: undefined; error: string };

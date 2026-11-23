@@ -74,6 +74,7 @@ button.primary, button[aria-pressed='true'] { background: var(--accent); color: 
   padding: 12px; min-width: 16rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
 }
 .options-body label { display: flex; align-items: center; gap: 8px; }
+.options-body fieldset { border: 1px solid var(--border); border-radius: var(--radius); margin: 0; padding: 6px 10px; display: grid; gap: 4px; }
 
 .workspace { flex: 1; display: grid; grid-template-columns: 1fr minmax(20rem, 26rem); min-height: 0; }
 .canvas { position: relative; min-height: 0; display: flex; flex-direction: column; }

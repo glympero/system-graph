@@ -78,6 +78,8 @@ flowchart LR
    blind spots. Adding a stack means adding a module to a list.
 3. **Merge.** Nodes are deduplicated, HTTP calls are matched to the route they hit (`/books/${id}` matches
    `GET /books/:id`), bare table names resolve to their migration, and any edge without provenance fails the build.
+   A call that reaches a known service but no known route is kept, pointed at the service, at half its extractor's
+   confidence. Anything that resolves to nothing is listed in `COVERAGE.md` instead of silently dropped.
 4. **Rules** run in plain Python over an in-memory index.
 5. **Publish** is atomic: write to `out.next/`, validate, swap file by file, keep `out.prev/`. The same input gives
    byte-identical output, which a test proves.
@@ -221,11 +223,18 @@ CI runs all of it on every push and publishes the explorer over the demo estate 
 
 ## What I would do next
 
-- Incremental builds that rescan only the repos that changed.
-- More stacks per concern (Go and Python routes, gRPC, SQS/SNS, Helm rendering), now that the plugin interface is set.
 - Architecture history: keep each `graph.json` and show what changed between two builds, in a PR comment.
-- A graph database once estates outgrow memory or people want ad-hoc queries (see ADR 1).
-- Ideas left out of v1 on purpose: hosted SaaS, auth, LLM-based extraction.
+- Library and function nodes. The contract already has `library:`, `function:`, `uses_library` and `routes_to`. No v1
+  extractor emits them yet; package manifests and API gateway configs are the obvious sources.
+
+Ideas left out of v1 on purpose:
+
+- **Incremental builds** that rescan only the repos that changed.
+- **Multi-language parity.** v1 covers one stack per concern (Express, Spring, Kafka, Flyway, Kubernetes, Terraform
+  Pub/Sub). Go and Python routes, gRPC, SQS/SNS and Helm rendering are each one more plugin.
+- **A graph database**, once estates outgrow memory or people want ad-hoc queries (see ADR 1).
+- **LLM-based extraction.** Deterministic static analysis is cheaper to rerun and easier to test.
+- **Hosted SaaS and auth.** v1 is a CLI and a static site.
 
 ## Project layout
 

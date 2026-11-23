@@ -38,8 +38,9 @@ function layout(view: View, spread: number): Graph {
   for (const edge of view.edges) {
     graph.addDirectedEdgeWithKey(edge.id, edge.from, edge.to, { rel: edge.rel, size: Math.min(4, 1 + edge.edges.length / 2) });
   }
+  // shortcut: synchronous ForceAtlas2 on the main thread, fine to a few thousand nodes; move to the FA2 web worker beyond.
   if (graph.order > 1) {
-    const settings = { ...forceAtlas2.inferSettings(graph), scalingRatio: 10 * spread, gravity: 0.5, barnesHutOptimize: false };
+    const settings = { ...forceAtlas2.inferSettings(graph), scalingRatio: 16 * spread, gravity: 0.5, barnesHutOptimize: false };
     forceAtlas2.assign(graph, { iterations: 400, settings });
   }
   return graph;
@@ -81,13 +82,17 @@ export function GraphView(props: GraphViewProps) {
           zIndex: focused ? 1 : 0,
         };
       },
-      edgeReducer: (key, data, attrs) => {
+      edgeReducer: (key, data, attrs, _state, _graphState, g) => {
         const p = latest.current;
         const colors = palette(p.dark);
-        const [from, , to] = key.split('|');
-        const focused = p.highlight.size === 0 || (p.highlight.has(from) && p.highlight.has(to))
-          || (p.highlight.size === 0 && (from === p.selected || to === p.selected));
-        return { ...data, color: focused ? colors.edge[attrs.rel as keyof typeof colors.edge] ?? colors.edge.calls : colors.dimmed, zIndex: focused ? 1 : 0 };
+        const from = g.source(key);
+        const to = g.target(key);
+        const inHighlight = p.highlight.size === 0 || (p.highlight.has(from) && p.highlight.has(to));
+        const touchesSelected = from === p.selected || to === p.selected;
+        const color = colors.edge[attrs.rel as keyof typeof colors.edge] ?? colors.edge.calls;
+        let zIndex = inHighlight ? 1 : 0;
+        if (touchesSelected) zIndex = 2;
+        return { ...data, color: inHighlight ? color : colors.dimmed, size: touchesSelected ? data.size + 1.5 : data.size, zIndex };
       },
     });
     sigma.on('clickNode', ({ node }) => latest.current.onSelect(node));

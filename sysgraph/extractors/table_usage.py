@@ -10,11 +10,13 @@ CONFIDENCE = 0.8
 BLIND_SPOTS = [
     "Only upper-case SQL keywords in code are read; ORM queries (JPA, Prisma, Sequelize) are not seen.",
     "Dynamic table names and stored procedures are not seen.",
+    "`EXTRACT(x FROM column)` reads as a table; the merge drops it as an unresolved reference.",
 ]
 
 _IDENT = r"([A-Za-z_][\w.]*)"
 _WRITE = re.compile(r"\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO)\s+" + _IDENT)
-_READ = re.compile(r"(?<!DELETE )\b(?:FROM|JOIN)\s+" + _IDENT)
+_READ = re.compile(r"\b(?:FROM|JOIN)\s+" + _IDENT)
+_NOT_TABLES = {"set", "select", "lateral", "unnest", "dual"}  # `DO UPDATE SET`, `FROM (SELECT`, `JOIN LATERAL`
 _CODE = (".java", ".kt", ".js", ".ts", ".mjs", ".py", ".go", ".cs")
 
 
@@ -27,6 +29,8 @@ def extract(ctx: RepoContext):
         for rel, pattern in (("writes_table", _WRITE), ("reads_table", _READ)):
             for m in pattern.finditer(text):
                 key = (rel, m.group(1).lower(), line_at(text, m.start()))
-                if key not in seen:
+                if rel == "reads_table" and text[:m.start()].rstrip().endswith("DELETE"):
+                    continue
+                if key not in seen and key[1] not in _NOT_TABLES:
                     seen.add(key)
                     yield Edge(ctx.service_id, f"table:{key[1]}", rel, ctx.rel(path), key[2])

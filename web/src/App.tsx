@@ -4,11 +4,13 @@ import { DetailsPanel } from './components/DetailsPanel.tsx';
 import { FindingsPanel } from './components/FindingsPanel.tsx';
 import { GraphView } from './components/GraphView.tsx';
 import { Legend } from './components/Legend.tsx';
+import { NodeOptions } from './components/NodeOptions.tsx';
 import { Palette } from './components/Palette.tsx';
 import type { GraphIndex } from './core/graph.ts';
 import { buildView, displayId, LENSES, type Lens } from './core/lenses.ts';
 import { runQuestion, type Answer } from './core/questions.ts';
-import type { Label } from './core/types.ts';
+import type { Label, NodeType } from './core/types.ts';
+import { TYPE_LABEL } from './theme.ts';
 import { useGraph, usePrefersDark, useViewState } from './state.ts';
 
 const SEVERITY: Record<Label, number> = { Bad: 3, Gap: 2, Good: 1 };
@@ -33,10 +35,10 @@ function Explorer({ index }: { index: GraphIndex }) {
   const [state, update] = useViewState();
   const dark = usePrefersDark();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [labels, setLabels] = useState(true);
-  const [showFindings, setShowFindings] = useState(true);
-  const [spread, setSpread] = useState(1);
-  const { lens, focus } = state;
+  const { lens, focus, hidden } = state;
+  const labels = !state.hideLabels;
+  const showFindings = !state.plainColours;
+  const spread = state.spread ?? 1;
   const depth = state.depth ?? 2;
 
   useEffect(() => {
@@ -50,7 +52,19 @@ function Explorer({ index }: { index: GraphIndex }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const view = useMemo(() => buildView(index, lens, focus, depth), [index, lens, focus, depth]);
+  const lensFocus = lens === 'impact' ? focus : undefined;
+  const fullView = useMemo(() => buildView(index, lens, lensFocus, depth), [index, lens, lensFocus, depth]);
+  const view = useMemo(() => {
+    if (!hidden) return fullView;
+    const nodes = fullView.nodes.filter((n) => !hidden.includes(n.type) || n.id === lensFocus);
+    const kept = new Set(nodes.map((n) => n.id));
+    return { nodes, edges: fullView.edges.filter((e) => kept.has(e.from) && kept.has(e.to)) };
+  }, [fullView, hidden, lensFocus]);
+  const lensTypes = [...new Set(fullView.nodes.map((n) => n.type))].sort();
+  const toggleType = (type: NodeType, show: boolean) => {
+    const next = (hidden ?? []).filter((t) => t !== type).concat(show ? [] : [type]);
+    update({ hidden: next.length > 0 ? next : undefined });
+  };
 
   const { answer, error } = useMemo((): { answer?: Answer; error?: string } => {
     if (!state.q) return {};
@@ -115,11 +129,7 @@ function Explorer({ index }: { index: GraphIndex }) {
             placeholder="Find a node…"
             onChange={(e) => index.nodes.has(e.target.value) && selectNode(e.target.value)}
           />
-          <datalist id="all-nodes">
-            {index.search('', undefined, 1000).map((n) => (
-              <option key={n.id} value={n.id}>{n.name}</option>
-            ))}
-          </datalist>
+          <NodeOptions index={index} id="all-nodes" />
         </label>
         <button type="button" className="primary ask" onClick={() => setPaletteOpen(true)}>
           Ask a question <kbd>Ctrl K</kbd>
@@ -127,11 +137,19 @@ function Explorer({ index }: { index: GraphIndex }) {
         <details className="options">
           <summary>Options</summary>
           <div className="options-body">
-            <label><input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} /> Show all labels</label>
-            <label><input type="checkbox" checked={showFindings} onChange={(e) => setShowFindings(e.target.checked)} /> Colour nodes with findings</label>
+            <fieldset>
+              <legend>Show</legend>
+              {lensTypes.map((type) => (
+                <label key={type}>
+                  <input type="checkbox" checked={!hidden?.includes(type)} onChange={(e) => toggleType(type, e.target.checked)} /> {TYPE_LABEL[type] ?? type}
+                </label>
+              ))}
+            </fieldset>
+            <label><input type="checkbox" checked={labels} onChange={(e) => update({ hideLabels: !e.target.checked || undefined })} /> Show all labels</label>
+            <label><input type="checkbox" checked={showFindings} onChange={(e) => update({ plainColours: !e.target.checked || undefined })} /> Colour nodes with findings</label>
             <label>
               Spread
-              <input type="range" min={0.5} max={3} step={0.25} value={spread} onChange={(e) => setSpread(Number(e.target.value))} />
+              <input type="range" min={0.5} max={3} step={0.25} value={spread} onChange={(e) => update({ spread: Number(e.target.value) })} />
             </label>
           </div>
         </details>

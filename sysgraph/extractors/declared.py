@@ -27,6 +27,6 @@ def extract(ctx: RepoContext):
     lines = text.splitlines()
     for target in doc.get("depends_on") or []:
         pattern = re.compile(rf"^\s*-\s*['\"]?{re.escape(target)}['\"]?\s*(#.*)?$")
-        line = next((i for i, l in enumerate(lines, 1) if pattern.match(l)), 1)
+        line = next((number for number, text_line in enumerate(lines, 1) if pattern.match(text_line)), 1)
         yield Edge(f"service:{service}", f"service:{target}", "declared_dependency", ctx.rel(path), line,
                    source="declared")

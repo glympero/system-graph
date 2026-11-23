@@ -39,6 +39,10 @@ spec:
         (doc,) = load_all(text)
         self.assertEqual(doc, {"depends_on": ["a", "b # not a comment"], "empty": [], "nothing": None, "name": "x"})
 
+    def test_apostrophe_inside_a_word_does_not_hide_a_comment(self):
+        (doc,) = load_all("owner: Bob's team  # lead\n")
+        self.assertEqual(doc, {"owner": "Bob's team"})
+
 
 if __name__ == "__main__":
     unittest.main()

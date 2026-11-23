@@ -52,7 +52,7 @@ export function DetailsPanel({ index, node, onAsk, onImpactLens, onClose }: Prop
       <dl className="props">
         {TEXT_PROPS.filter((k) => props[k] !== undefined).map((k) => (
           <div key={k}>
-            <dt>{k.replace('_', ' ')}</dt>
+            <dt>{k.replaceAll('_', ' ')}</dt>
             <dd>{String(props[k])}</dd>
           </div>
         ))}

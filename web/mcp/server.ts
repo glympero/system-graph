@@ -15,6 +15,7 @@ import type { FindingsData, GraphData } from '../src/core/types.ts';
 
 const outDir = process.env.SYSGRAPH_OUT ? resolve(process.env.SYSGRAPH_OUT) : fileURLToPath(new URL('../../out/', import.meta.url));
 const viewUrl = process.env.SYSGRAPH_VIEW_URL ?? 'http://localhost:5173/';
+const SEARCH_LIMIT = 50;
 
 function load(): GraphIndex {
   const read = <T,>(name: string): T => JSON.parse(readFileSync(resolve(outDir, name), 'utf8')) as T;
@@ -56,7 +57,7 @@ const server = new McpServer({ name: 'system-graph', version: '0.1.0' });
 for (const question of QUESTIONS) {
   const shape = Object.fromEntries(question.params.map((p) => [p.name, schemaFor(p)]));
   server.registerTool(
-    question.id.replace('-', '_'),
+    question.id.replaceAll('-', '_'),
     { title: question.title, description: `${question.description} Every answer cites the file and line that proves it.`, inputSchema: shape },
     (input: Record<string, unknown>) => {
       const args = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
@@ -78,9 +79,10 @@ server.registerTool(
     inputSchema: { query: z.string().describe('Part of a name, e.g. "orders".') },
   },
   ({ query }) => {
-    const hits = index.search(query);
-    const text = hits.length > 0 ? hits.map((n) => `- ${n.id} (${n.type})`).join('\n') : `No node matches "${query}".`;
-    return { content: [{ type: 'text' as const, text }] };
+    const hits = index.search(query, undefined, SEARCH_LIMIT + 1);
+    const lines = hits.slice(0, SEARCH_LIMIT).map((n) => `- ${n.id} (${n.type})`);
+    if (hits.length > SEARCH_LIMIT) lines.push(`(first ${SEARCH_LIMIT} shown, narrow the query for more)`);
+    return { content: [{ type: 'text' as const, text: lines.length > 0 ? lines.join('\n') : `No node matches "${query}".` }] };
   },
 );
 
@@ -89,9 +91,13 @@ server.registerTool(
   { title: 'All findings', description: 'Every architecture rule finding (Bad, Gap, Good) with its evidence.', inputSchema: {} },
   () => {
     const text = index.findings.findings
-      .map((f) => [`- [${f.label}] ${f.id}: ${f.message}`, ...f.evidence.map((ev) => `  - ${ev.file}:${ev.line} ${ev.note ?? ''}`.trimEnd())].join('\n'))
+      .map((f) => [
+        `- [${f.label}] ${f.id}: ${f.message}`,
+        `  ${deepLink(viewUrl, { lens: 'services', finding: f.id, focus: f.subject })}`,
+        ...f.evidence.map((ev) => `  - ${ev.file}:${ev.line} ${ev.note ?? ''}`.trimEnd()),
+      ].join('\n'))
       .join('\n');
-    return { content: [{ type: 'text' as const, text: `${text}\n\nOpen in the explorer: ${viewUrl}` }] };
+    return { content: [{ type: 'text' as const, text }] };
   },
 );
 

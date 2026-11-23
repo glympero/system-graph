@@ -12,7 +12,7 @@ from sysgraph.model import Edge
 @dataclass
 class Finding:
     rule: str
-    subject: str  # the key part of the id; usually a node id
+    key: str  # what makes the id unique within the rule, usually a node id
     label: str  # Bad, Gap or Good
     message: str
     nodes: list[str]
@@ -21,7 +21,7 @@ class Finding:
 
     def to_json(self, title: str) -> dict:
         evidence = [{"file": e.file, "line": e.line, "note": describe(e)} for e in self.evidence]
-        return {"id": f"{self.rule}:{self.subject}", "rule": self.rule, "title": title, "label": self.label,
+        return {"id": f"{self.rule}:{self.key}", "rule": self.rule, "title": title, "label": self.label,
                 "subject": self.nodes[0], "nodes": self.nodes, "message": self.message,
                 "evidence": sorted(evidence + self.extra_evidence, key=lambda x: (x["file"], x["line"]))}
 
@@ -32,9 +32,13 @@ REL_TEXT = {"calls": "calls", "publishes": "publishes to", "subscribes": "subscr
 
 def describe(edge: Edge) -> str:
     """Evidence notes in words: `payments-service writes orders.orders`."""
-    def short(node_id: str) -> str:
-        return node_id.split(":", 1)[1].replace(":", " ", 1) if node_id.startswith("endpoint:") else node_id.split(":", 1)[1]
-    return f"{short(edge.from_)} {REL_TEXT.get(edge.rel, edge.rel)} {short(edge.to)}"
+    return f"{_short(edge.from_)} {REL_TEXT.get(edge.rel, edge.rel)} {_short(edge.to)}"
+
+
+def _short(node_id: str) -> str:
+    """`service:orders-service` -> `orders-service`, `endpoint:orders-service:GET /x` -> `orders-service GET /x`."""
+    rest = node_id.split(":", 1)[1]
+    return rest.replace(":", " ", 1) if node_id.startswith("endpoint:") else rest
 
 
 class Index:
@@ -61,8 +65,6 @@ class Index:
         return pairs
 
 
-def _short(node_id: str) -> str:
-    return node_id.split(":", 1)[1]
 
 
 def _names(node_ids) -> str:
@@ -70,23 +72,24 @@ def _names(node_ids) -> str:
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
 
 
-def topic_without_subscribers(ix: Index):
+def _topic_traffic(ix: Index):
     for topic in ix.of_type("topic"):
         pubs = [e for e in ix.by_rel["publishes"] if e.to == topic.id]
         subs = [e for e in ix.by_rel["subscribes"] if e.to == topic.id]
+        yield topic, pubs, subs
+
+
+def topic_without_subscribers(ix: Index):
+    for topic, pubs, subs in _topic_traffic(ix):
         if pubs and not subs:
-            who = _names(e.from_ for e in pubs)
-            yield Finding("R1", topic.id, "Gap", f"Published by {who}, nothing subscribes to it.",
+            yield Finding("R1", topic.id, "Gap", f"Published by {_names(e.from_ for e in pubs)}, nothing subscribes to it.",
                           [topic.id], pubs)
 
 
 def subscriber_without_publisher(ix: Index):
-    for topic in ix.of_type("topic"):
-        pubs = [e for e in ix.by_rel["publishes"] if e.to == topic.id]
-        subs = [e for e in ix.by_rel["subscribes"] if e.to == topic.id]
+    for topic, pubs, subs in _topic_traffic(ix):
         if subs and not pubs:
-            who = _names(e.from_ for e in subs)
-            yield Finding("R2", topic.id, "Gap", f"Consumed by {who}, nothing publishes it.",
+            yield Finding("R2", topic.id, "Gap", f"Consumed by {_names(e.from_ for e in subs)}, nothing publishes it.",
                           [topic.id], subs)
 
 
@@ -102,48 +105,25 @@ def shared_table_writes(ix: Index):
                           [table, *services], edges)
 
 
-def _strongly_connected(graph: dict[str, set[str]]) -> list[list[str]]:
-    """Tarjan's algorithm, iterative so deep graphs do not hit the recursion limit."""
-    index: dict[str, int] = {}
-    low: dict[str, int] = {}
-    stack: list[str] = []
-    on_stack: set[str] = set()
-    result = []
-    counter = 0
-    for start in sorted(graph):
-        if start in index:
-            continue
-        work = [(start, iter(sorted(graph[start])))]
-        index[start] = low[start] = counter
-        counter += 1
-        stack.append(start)
-        on_stack.add(start)
-        while work:
-            node, children = work[-1]
-            child = next(children, None)
-            if child is not None:
-                if child not in index:
-                    index[child] = low[child] = counter
-                    counter += 1
-                    stack.append(child)
-                    on_stack.add(child)
-                    work.append((child, iter(sorted(graph.get(child, ())))))
-                elif child in on_stack:
-                    low[node] = min(low[node], index[child])
-                continue
-            work.pop()
-            if work:
-                low[work[-1][0]] = min(low[work[-1][0]], low[node])
-            if low[node] == index[node]:
-                component = []
-                while True:
-                    member = stack.pop()
-                    on_stack.discard(member)
-                    component.append(member)
-                    if member == node:
-                        break
-                result.append(sorted(component))
-    return result
+def _reachable(graph: dict[str, set[str]], start: str) -> set[str]:
+    seen, stack = set(), [start]
+    while stack:
+        for nxt in graph.get(stack.pop(), ()):
+            if nxt not in seen:
+                seen.add(nxt)
+                stack.append(nxt)
+    return seen
+
+
+def _cycles(graph: dict[str, set[str]]) -> list[list[str]]:
+    """Groups of services that can all reach each other.
+
+    shortcut: one reachability search per service, O(services x calls); fine for hundreds of services, switch to
+    Tarjan's algorithm beyond that.
+    """
+    reach = {node: _reachable(graph, node) for node in graph}
+    groups = {tuple(sorted(n for n in reach[node] if node in reach.get(n, ()))) for node in graph if node in reach[node]}
+    return sorted(list(group) for group in groups)
 
 
 def call_cycles(ix: Index):
@@ -151,7 +131,7 @@ def call_cycles(ix: Index):
     graph: dict[str, set[str]] = defaultdict(set)
     for a, b in pairs:
         graph[a].add(b)
-    for component in _strongly_connected(graph):
+    for component in _cycles(graph):
         if len(component) < 2:
             continue
         members = set(component)
@@ -198,15 +178,16 @@ def blocking_pdb(ix: Index):
     for svc in ix.of_type("service"):
         pdb = svc.props.get("pdb")
         hpa, deployment = svc.props.get("hpa"), svc.props.get("deployment")
-        replicas = hpa["min"] if hpa else (deployment or {}).get("replicas")
-        if not pdb or not isinstance(pdb["min_available"], int) or replicas is None:
+        floor = hpa["min"] if hpa else (deployment or {}).get("replicas")
+        # shortcut: a percentage minAvailable ("100%") is skipped; resolve it against the replica floor when needed.
+        if not pdb or not isinstance(pdb["min_available"], int) or floor is None:
             continue
-        if pdb["min_available"] >= replicas:
-            source = hpa or deployment
-            yield Finding("R7", svc.id, "Bad", f"{svc.name} PDB needs {pdb['min_available']} pods available and the "
-                          f"service can run only {replicas}, so no pod can ever be evicted.", [svc.id], [],
+        if pdb["min_available"] >= floor:
+            scales = "the autoscaler can scale it down to" if hpa else "it runs"
+            yield Finding("R7", svc.id, "Bad", f"{svc.name} PDB needs {pdb['min_available']} pods available and {scales} "
+                          f"{floor}. At that size no pod can be evicted, so node drains stall.", [svc.id], [],
                           [_fact(pdb, f"minAvailable: {pdb['min_available']}"),
-                           _fact(source, f"replicas floor: {replicas}")])
+                           _fact(hpa or deployment, f"replica floor: {floor}")])
 
 
 def dead_letter_policy(ix: Index):

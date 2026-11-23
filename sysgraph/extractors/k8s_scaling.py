@@ -16,7 +16,7 @@ def _documents(text: str):
     """Yield (first line number, document text) for each `---` separated document."""
     start, buf = 1, []
     for number, line in enumerate(text.splitlines(), 1):
-        if line.strip() == "---":
+        if line.strip() == "---" or line.startswith("--- "):
             yield start, "\n".join(buf)
             start, buf = number + 1, []
         else:
