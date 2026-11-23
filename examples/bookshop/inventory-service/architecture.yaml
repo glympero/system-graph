@@ -1,0 +1,5 @@
+service: inventory-service
+owner: fulfilment-team
+tier: core
+description: Stock levels per SKU and reservations for open orders.
+depends_on: []

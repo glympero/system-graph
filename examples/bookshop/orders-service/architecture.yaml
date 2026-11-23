@@ -1,0 +1,7 @@
+service: orders-service
+owner: checkout-team
+tier: core
+description: Takes orders, reserves stock and asks payments to charge.
+depends_on:
+  - payments-service
+  - inventory-service

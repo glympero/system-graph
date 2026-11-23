@@ -1,0 +1,6 @@
+service: search-service
+owner: discovery-team
+tier: core
+description: Full-text search over the catalogue, fed by catalogue events.
+# Only listens to events, so no synchronous dependencies.
+depends_on: []

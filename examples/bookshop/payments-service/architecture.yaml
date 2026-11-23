@@ -1,0 +1,6 @@
+service: payments-service
+owner: checkout-team
+tier: core
+description: Charges cards through the payment provider and records refunds.
+depends_on:
+  - orders-service

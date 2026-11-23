@@ -1,0 +1,25 @@
+# Inkwell, a fictional online bookshop. Nine small repos, enough for every extractor and rule to fire.
+# Paths are relative to this file. A repo can also be `git: <url>` with an optional `ref:`.
+name: bookshop
+# Evidence links in the explorer point at the files in this repo on GitHub.
+link: https://github.com/glympero/system-graph/blob/main/examples/bookshop/{repo}/{path}#L{line}
+repos:
+  - name: storefront-web
+    path: storefront-web
+  - name: admin-portal
+    path: admin-portal
+  - name: catalog-api
+    path: catalog-api
+  - name: search-service
+    path: search-service
+  - name: orders-service
+    path: orders-service
+  - name: payments-service
+    path: payments-service
+  - name: inventory-service
+    path: inventory-service
+  - name: notifier
+    path: notifier
+  - name: infra
+    path: infra
+    service: false

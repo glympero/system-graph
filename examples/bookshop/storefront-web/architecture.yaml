@@ -1,0 +1,9 @@
+service: storefront-web
+owner: web-team
+tier: frontend
+description: Customer-facing shop. Browse, search and check out.
+depends_on:
+  - catalog-api
+  - search-service
+  - orders-service
+  - inventory-service

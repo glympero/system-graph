@@ -1,0 +1,5 @@
+service: catalog-api
+owner: catalogue-team
+tier: core
+description: Source of truth for books and authors.
+depends_on: []

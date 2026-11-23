@@ -1,0 +1,10 @@
+out/
+out.prev/
+out.next/
+.sysgraph-cache/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+test-results/
+playwright-report/

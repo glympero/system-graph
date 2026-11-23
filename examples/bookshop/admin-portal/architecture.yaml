@@ -1,0 +1,8 @@
+service: admin-portal
+owner: web-team
+tier: frontend
+description: Back-office tool for the catalogue, stock and order support.
+depends_on:
+  - catalog-api
+  - inventory-service
+  - orders-service

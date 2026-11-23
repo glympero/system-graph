@@ -1,0 +1,15 @@
+{
+  "name": "admin-portal",
+  "private": true,
+  "version": "1.9.2",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "next": "^14.2.13",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

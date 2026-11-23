@@ -1,0 +1,5 @@
+service: notifier
+owner: growth-team
+tier: supporting
+description: Sends order and welcome emails.
+depends_on: []
